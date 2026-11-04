@@ -6,9 +6,17 @@ started under one `CLAUDE_CONFIG_DIR` can be resumed from another.
 ## Install
 
 ```sh
-go install github.com/arman-arif/ccsync@latest   # once the repo is pushed
-go build -o ccsync .                             # or from this folder
+go install github.com/arman-arif/ccsync@latest
 ```
+
+Or from a clone:
+
+```sh
+make build
+make install PREFIX=~/.local   # or: sudo make install
+```
+
+Run `make help` for the other targets.
 
 Needs Go 1.24+ and Linux or macOS. It has no dependencies outside the standard library.
 
