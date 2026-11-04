@@ -23,6 +23,7 @@ type Options struct {
 	Accounts []Account       // accounts to keep in step
 	Projects []string        // encoded project folder names; empty means all
 	Live     map[string]bool // session IDs never touched in this run
+	Force    bool            // sync running sessions too, ignoring Live and activeWindow
 	Apply    bool            // false reports without writing
 	Now      time.Time
 }
@@ -128,7 +129,8 @@ func syncSession(session sessionKey, opts Options) SessionResult {
 
 	// A negative age is a clock-skewed mtime, not a session being written to.
 	age := opts.Now.Sub(newest)
-	if opts.Live[session.id] || (age >= 0 && age < activeWindow) {
+	running := opts.Live[session.id] || (age >= 0 && age < activeWindow)
+	if running && !opts.Force {
 		result.Status = StatusSkipped
 		result.Title = sessionTitle(transcript)
 		return result

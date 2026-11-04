@@ -27,6 +27,7 @@ Flags for status and sync:
   --all              Cover every project in every account
   --accounts LIST    Comma-separated account names or config dir paths
                      (default: all accounts found)
+  --force            Also sync sessions that look like they are running
 
 Accounts are ~/.claude* dirs containing projects/, plus $CLAUDE_CONFIG_DIR.
 `
@@ -73,6 +74,7 @@ func runSync(args []string, discovered []Account, apply bool, out io.Writer) err
 	project := flags.String("project", "", "")
 	all := flags.Bool("all", false, "")
 	accountSpec := flags.String("accounts", "", "")
+	force := flags.Bool("force", false, "")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			fmt.Fprint(out, usage)
@@ -111,6 +113,7 @@ func runSync(args []string, discovered []Account, apply bool, out io.Writer) err
 		Accounts: accounts,
 		Projects: projects,
 		Live:     liveSet,
+		Force:    *force,
 		Apply:    apply,
 		Now:      time.Now(),
 	})

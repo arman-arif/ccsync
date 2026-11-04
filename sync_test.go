@@ -235,6 +235,22 @@ func TestRunningSessionsAreLeftAlone(t *testing.T) {
 	}
 }
 
+func TestForceSyncsRunningSessions(t *testing.T) {
+	root := t.TempDir()
+	a, b := newAccount(t, root, "a"), newAccount(t, root, "b")
+	writeFile(t, transcriptPath(a, project, session), `{"uuid":"1"}`+"\n", now.Add(-5*time.Second))
+
+	live := map[string]bool{session: true}
+	results := mustSync(t, Options{Accounts: []Account{a, b}, Live: live, Force: true, Apply: true})
+
+	if results[0].Status != StatusCopy {
+		t.Errorf("status = %s, want copy", results[0].Status)
+	}
+	if got := readFile(t, transcriptPath(b, project, session)); got != `{"uuid":"1"}`+"\n" {
+		t.Errorf("copied transcript = %q", got)
+	}
+}
+
 func TestDeadProcessDoesNotBlockSync(t *testing.T) {
 	root := t.TempDir()
 	a := newAccount(t, root, "a")

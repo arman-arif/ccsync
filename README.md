@@ -29,6 +29,7 @@ ccsync sync                            # sync the current project
 ccsync sync --project ~/Codes/app      # sync another project
 ccsync sync --accounts work,personal   # limit which accounts take part
 ccsync sync --all                      # every project in every account
+ccsync sync --force                    # include sessions that look running
 ```
 
 Accounts are the `~/.claude*` dirs containing `projects/`, plus
@@ -65,7 +66,10 @@ Nothing else is touched: credentials, `.claude.json`, settings, `history.jsonl`,
   undocumented transcript schema. Damaged lines are not shared.
 - **Running sessions are skipped.** That means sessions whose process is listed
   in any account's `sessions/` registry, or transcripts modified in the last 30
-  seconds. Run `ccsync sync` again after they exit.
+  seconds. Run `ccsync sync` again after they exit, or pass `--force` to sync
+  them anyway. The other accounts then get a snapshot that misses whatever the
+  session writes afterwards (the next sync picks that up), and lines from other
+  accounts are appended to a transcript the session is still writing.
 - **New files appear atomically** and keep their original mtime and permissions.
 - **Deletions don't propagate.** A session deleted or cleaned up in one account
   comes back on the next sync while another account still has it.
