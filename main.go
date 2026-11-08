@@ -1,4 +1,4 @@
-// Command ccsync keeps Claude Code project sessions in step across the config
+// Command ccsession keeps Claude Code project sessions in step across the config
 // dirs (CLAUDE_CONFIG_DIR) of several accounts, so a session started in one
 // account can be resumed from another.
 package main
@@ -15,12 +15,12 @@ import (
 	"time"
 )
 
-const usage = `ccsync - share Claude Code project sessions between accounts
+const usage = `ccsession - share Claude Code project sessions between accounts
 
 Usage:
-  ccsync accounts                 List the config dirs that were found
-  ccsync status [flags]           Show what a sync would do (changes nothing)
-  ccsync sync   [flags]           Copy and merge sessions between accounts
+  ccsession accounts                 List the config dirs that were found
+  ccsession status [flags]           Show what a sync would do (changes nothing)
+  ccsession sync   [flags]           Copy and merge sessions between accounts
 
 Flags for status and sync:
   --project PATH     Project to cover (default: current directory)
@@ -34,7 +34,7 @@ Accounts are ~/.claude* dirs containing projects/, plus $CLAUDE_CONFIG_DIR.
 
 func main() {
 	if err := run(os.Args[1:], os.Stdout); err != nil {
-		fmt.Fprintln(os.Stderr, "ccsync:", err)
+		fmt.Fprintln(os.Stderr, "ccsession:", err)
 		os.Exit(1)
 	}
 }
@@ -65,11 +65,11 @@ func run(args []string, out io.Writer) error {
 		fmt.Fprint(out, usage)
 		return nil
 	}
-	return fmt.Errorf("unknown command %q (try: ccsync help)", args[0])
+	return fmt.Errorf("unknown command %q (try: ccsession help)", args[0])
 }
 
 func runSync(args []string, discovered []Account, apply bool, out io.Writer) error {
-	flags := flag.NewFlagSet("ccsync", flag.ContinueOnError)
+	flags := flag.NewFlagSet("ccsession", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	project := flags.String("project", "", "")
 	all := flags.Bool("all", false, "")
@@ -80,10 +80,10 @@ func runSync(args []string, discovered []Account, apply bool, out io.Writer) err
 			fmt.Fprint(out, usage)
 			return nil
 		}
-		return fmt.Errorf("%w (try: ccsync help)", err)
+		return fmt.Errorf("%w (try: ccsession help)", err)
 	}
 	if flags.NArg() > 0 {
-		return fmt.Errorf("unexpected argument %q (try: ccsync help)", flags.Arg(0))
+		return fmt.Errorf("unexpected argument %q (try: ccsession help)", flags.Arg(0))
 	}
 	if *all && *project != "" {
 		return fmt.Errorf("--all and --project cannot be combined")

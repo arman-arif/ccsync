@@ -1,4 +1,4 @@
-BINARY := ccsync
+BINARY := ccsession
 GOFMT  ?= $(shell go env GOROOT)/bin/gofmt
 PREFIX ?= /usr/local
 BIN    := build/bin

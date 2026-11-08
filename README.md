@@ -1,4 +1,4 @@
-# ccsync
+# ccsession
 
 Share Claude Code project sessions between accounts on one machine, so a session
 started under one `CLAUDE_CONFIG_DIR` can be resumed from another.
@@ -6,7 +6,7 @@ started under one `CLAUDE_CONFIG_DIR` can be resumed from another.
 ## Install
 
 ```sh
-go install github.com/arman-arif/ccsync@latest
+go install github.com/arman-arif/ccsession@latest
 ```
 
 Or from a clone:
@@ -23,13 +23,13 @@ Needs Go 1.24+ and Linux or macOS. It has no dependencies outside the standard l
 ## Usage
 
 ```sh
-ccsync accounts                        # list the config dirs found
-ccsync status                          # preview for the current project
-ccsync sync                            # sync the current project
-ccsync sync --project ~/Codes/app      # sync another project
-ccsync sync --accounts work,personal   # limit which accounts take part
-ccsync sync --all                      # every project in every account
-ccsync sync --force                    # include sessions that look running
+ccsession accounts                        # list the config dirs found
+ccsession status                          # preview for the current project
+ccsession sync                            # sync the current project
+ccsession sync --project ~/Codes/app      # sync another project
+ccsession sync --accounts work,personal   # limit which accounts take part
+ccsession sync --all                      # every project in every account
+ccsession sync --force                    # include sessions that look running
 ```
 
 Accounts are the `~/.claude*` dirs containing `projects/`, plus
@@ -66,7 +66,7 @@ Nothing else is touched: credentials, `.claude.json`, settings, `history.jsonl`,
   undocumented transcript schema. Damaged lines are not shared.
 - **Running sessions are skipped.** That means sessions whose process is listed
   in any account's `sessions/` registry, or transcripts modified in the last 30
-  seconds. Run `ccsync sync` again after they exit, or pass `--force` to sync
+  seconds. Run `ccsession sync` again after they exit, or pass `--force` to sync
   them anyway. The other accounts then get a snapshot that misses whatever the
   session writes afterwards (the next sync picks that up), and lines from other
   accounts are appended to a transcript the session is still writing.
@@ -85,5 +85,5 @@ Nothing else is touched: credentials, `.claude.json`, settings, `history.jsonl`,
   copies matching.
 - **Paths in old messages.** Older tool output may mention the original account's
   config dir. Those paths are not rewritten, and they still exist on this machine.
-- **One machine only.** Project folder names come from absolute paths, so ccsync
+- **One machine only.** Project folder names come from absolute paths, so ccsession
   does not sync between computers.

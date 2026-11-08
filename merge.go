@@ -12,7 +12,11 @@ import (
 	"time"
 )
 
-const tempPrefix = ".ccsync-tmp-"
+const tempPrefix = ".ccsession-tmp-"
+
+// legacyTempPrefix is what releases named ccsync used. A crash could have left
+// such files behind, and they must not be synced as session files.
+const legacyTempPrefix = ".ccsync-tmp-"
 
 type outcome int
 

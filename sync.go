@@ -205,7 +205,7 @@ func sessionFiles(session sessionKey, accounts []Account) ([]string, error) {
 					}
 					return err
 				}
-				if !entry.Type().IsRegular() || strings.HasPrefix(entry.Name(), tempPrefix) {
+				if !entry.Type().IsRegular() || strings.HasPrefix(entry.Name(), tempPrefix) || strings.HasPrefix(entry.Name(), legacyTempPrefix) {
 					return nil
 				}
 				rel, err := filepath.Rel(account.Dir, path)
