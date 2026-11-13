@@ -19,17 +19,27 @@ const usage = `ccsession - share Claude Code project sessions between accounts
 
 Usage:
   ccsession accounts                 List the config dirs that were found
+  ccsession exclude [flags] [ACCOUNT...]
+                                     List or change accounts left out of sync
   ccsession status [flags]           Show what a sync would do (changes nothing)
   ccsession sync   [flags]           Copy and merge sessions between accounts
 
 Flags for status and sync:
   --project PATH     Project to cover (default: current directory)
   --all              Cover every project in every account
+  --session ID       Sync only this session; a unique prefix is enough, and
+                     every project is searched unless --project is given
   --accounts LIST    Comma-separated account names or config dir paths
                      (default: all accounts found)
+  --exclude LIST     Leave these accounts untouched for this run too
   --force            Also sync sessions that look like they are running
 
+Flags for exclude:
+  --remove           Stop excluding the given accounts
+
 Accounts are ~/.claude* dirs containing projects/, plus $CLAUDE_CONFIG_DIR.
+The exclude list is stored in $XDG_CONFIG_HOME/ccsession/config.json
+(default ~/.config/ccsession/config.json).
 `
 
 func main() {
@@ -57,6 +67,8 @@ func run(args []string, out io.Writer) error {
 	switch args[0] {
 	case "accounts":
 		return printAccounts(out, discovered)
+	case "exclude":
+		return runExclude(args[1:], discovered, out)
 	case "status":
 		return runSync(args[1:], discovered, false, out)
 	case "sync":
@@ -73,7 +85,9 @@ func runSync(args []string, discovered []Account, apply bool, out io.Writer) err
 	flags.SetOutput(io.Discard)
 	project := flags.String("project", "", "")
 	all := flags.Bool("all", false, "")
+	session := flags.String("session", "", "")
 	accountSpec := flags.String("accounts", "", "")
+	excludeSpec := flags.String("exclude", "", "")
 	force := flags.Bool("force", false, "")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -89,9 +103,22 @@ func runSync(args []string, discovered []Account, apply bool, out io.Writer) err
 		return fmt.Errorf("--all and --project cannot be combined")
 	}
 
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
+	}
+
 	accounts, err := selectAccounts(discovered, *accountSpec)
 	if err != nil {
 		return err
+	}
+	accounts = withoutNames(accounts, cfg.Exclude)
+	if *excludeSpec != "" {
+		excluded, err := selectAccounts(discovered, *excludeSpec)
+		if err != nil {
+			return err
+		}
+		accounts = withoutAccounts(accounts, excluded)
 	}
 	if len(accounts) < 2 {
 		return fmt.Errorf("need at least two accounts to sync, have %d", len(accounts))
@@ -99,8 +126,15 @@ func runSync(args []string, discovered []Account, apply bool, out io.Writer) err
 
 	var projects []string
 	var projectPath string
-	if !*all {
+	switch {
+	case *project != "":
 		projectPath, err = resolveProject(*project)
+		if err != nil {
+			return err
+		}
+		projects = []string{encodeProject(projectPath)}
+	case !*all && *session == "":
+		projectPath, err = resolveProject("")
 		if err != nil {
 			return err
 		}
@@ -112,6 +146,7 @@ func runSync(args []string, discovered []Account, apply bool, out io.Writer) err
 	results, err := Sync(Options{
 		Accounts: accounts,
 		Projects: projects,
+		Session:  *session,
 		Live:     liveSet,
 		Force:    *force,
 		Apply:    apply,
@@ -124,6 +159,91 @@ func runSync(args []string, discovered []Account, apply bool, out io.Writer) err
 		return fmt.Errorf("no sessions for %s in any account (use --project or --all)", projectPath)
 	}
 	return printResults(out, results, apply)
+}
+
+func runExclude(args []string, discovered []Account, out io.Writer) error {
+	flags := flag.NewFlagSet("ccsession", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	remove := flags.Bool("remove", false, "")
+	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			fmt.Fprint(out, usage)
+			return nil
+		}
+		return fmt.Errorf("%w (try: ccsession help)", err)
+	}
+
+	wants := splitList(flags.Args())
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
+	}
+	if len(wants) == 0 {
+		if *remove {
+			return fmt.Errorf("--remove needs at least one account")
+		}
+		printExclude(out, cfg.Exclude)
+		return nil
+	}
+
+	if *remove {
+		drop := map[string]bool{}
+		for _, want := range wants {
+			name := want
+			if account, err := resolveAccount(discovered, want); err == nil {
+				name = account.Name
+			}
+			drop[name] = true
+		}
+		kept := cfg.Exclude[:0]
+		for _, name := range cfg.Exclude {
+			if !drop[name] {
+				kept = append(kept, name)
+			}
+		}
+		cfg.Exclude = kept
+	} else {
+		picked, err := selectAccounts(discovered, strings.Join(wants, ","))
+		if err != nil {
+			return err
+		}
+		seen := map[string]bool{}
+		for _, name := range cfg.Exclude {
+			seen[name] = true
+		}
+		for _, account := range picked {
+			if !seen[account.Name] {
+				seen[account.Name] = true
+				cfg.Exclude = append(cfg.Exclude, account.Name)
+			}
+		}
+	}
+
+	if err := saveConfig(cfg); err != nil {
+		return err
+	}
+	printExclude(out, cfg.Exclude)
+	return nil
+}
+
+func splitList(args []string) []string {
+	var wants []string
+	for _, arg := range args {
+		for _, want := range strings.Split(arg, ",") {
+			if want = strings.TrimSpace(want); want != "" {
+				wants = append(wants, want)
+			}
+		}
+	}
+	return wants
+}
+
+func printExclude(out io.Writer, names []string) {
+	if len(names) == 0 {
+		fmt.Fprintln(out, "No accounts are excluded; every discovered account takes part in sync.")
+		return
+	}
+	fmt.Fprintf(out, "Excluded from syncing: %s\n", strings.Join(names, ", "))
 }
 
 func resolveProject(path string) (string, error) {

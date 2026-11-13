@@ -24,10 +24,14 @@ Needs Go 1.24+ and Linux or macOS. It has no dependencies outside the standard l
 
 ```sh
 ccsession accounts                        # list the config dirs found
+ccsession exclude work                    # skip an account in every sync
+ccsession exclude --remove work           # start syncing it again
 ccsession status                          # preview for the current project
 ccsession sync                            # sync the current project
 ccsession sync --project ~/Codes/app      # sync another project
+ccsession sync --session 1a2b3c4d         # only that session (prefix is fine)
 ccsession sync --accounts work,personal   # limit which accounts take part
+ccsession sync --exclude work             # leave an account out of one run
 ccsession sync --all                      # every project in every account
 ccsession sync --force                    # include sessions that look running
 ```
@@ -35,6 +39,21 @@ ccsession sync --force                    # include sessions that look running
 Accounts are the `~/.claude*` dirs containing `projects/`, plus
 `$CLAUDE_CONFIG_DIR`. `~/.claude` is named `default` and `~/.claude-work` is
 named `work`. `--accounts` also accepts full paths.
+
+`--session` takes a session ID or an unambiguous prefix and searches every
+project unless `--project` is given. Pass a longer prefix if it reports that
+the ID matches several sessions.
+
+`--exclude` takes the same names or paths as `--accounts` and removes those
+accounts after `--accounts` has selected the ones to sync.
+
+`ccsession exclude ACCOUNT...` makes the exclusion permanent. The list is stored
+in `$XDG_CONFIG_HOME/ccsession/config.json` (default
+`~/.config/ccsession/config.json`) and is read by every `status` and `sync`.
+Entries are account names; an entry whose account no longer exists is ignored.
+Excluded accounts stay out even when named in `--accounts`. Run `ccsession
+exclude` with no arguments to show the list, or `ccsession exclude --remove
+ACCOUNT...` to take an account off it.
 
 After syncing, resume from the other account as usual:
 

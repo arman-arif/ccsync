@@ -86,6 +86,39 @@ func selectAccounts(all []Account, spec string) ([]Account, error) {
 	return picked, nil
 }
 
+// withoutNames removes accounts whose name appears in names. A name that
+// matches nothing is ignored, so a config entry survives its account vanishing.
+func withoutNames(accounts []Account, names []string) []Account {
+	if len(names) == 0 {
+		return accounts
+	}
+	drop := make(map[string]bool, len(names))
+	for _, name := range names {
+		drop[name] = true
+	}
+	kept := make([]Account, 0, len(accounts))
+	for _, account := range accounts {
+		if !drop[account.Name] {
+			kept = append(kept, account)
+		}
+	}
+	return kept
+}
+
+func withoutAccounts(accounts, excluded []Account) []Account {
+	drop := make(map[string]bool, len(excluded))
+	for _, account := range excluded {
+		drop[account.Dir] = true
+	}
+	kept := make([]Account, 0, len(accounts))
+	for _, account := range accounts {
+		if !drop[account.Dir] {
+			kept = append(kept, account)
+		}
+	}
+	return kept
+}
+
 func resolveAccount(all []Account, want string) (Account, error) {
 	for _, a := range all {
 		if a.Name == want {

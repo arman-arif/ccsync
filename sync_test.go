@@ -484,6 +484,7 @@ func TestSelectAccounts(t *testing.T) {
 func TestCommandOutput(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", root)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
 	a, b := newAccount(t, root, "a"), newAccount(t, root, "b")
 	// run uses the real clock, so the fixture has to be old relative to it.
@@ -522,6 +523,150 @@ func TestCommandOutput(t *testing.T) {
 	}
 	if err := run([]string{"sync", "--all", "--accounts", "a"}, &out); err == nil {
 		t.Errorf("single account accepted")
+	}
+}
+
+func TestSessionScopeCoversOneSession(t *testing.T) {
+	root := t.TempDir()
+	a, b := newAccount(t, root, "a"), newAccount(t, root, "b")
+	other := "22222222-2222-2222-2222-222222222222"
+	writeFile(t, transcriptPath(a, project, session), `{"uuid":"1"}`+"\n", old)
+	writeFile(t, transcriptPath(a, "-home-me-other", other), `{"uuid":"2"}`+"\n", old)
+
+	results := mustSync(t, Options{Accounts: []Account{a, b}, Session: session, Apply: true})
+
+	if len(results) != 1 || results[0].ID != session || results[0].Status != StatusCopy {
+		t.Fatalf("results = %+v", results)
+	}
+	if _, err := os.Stat(transcriptPath(b, "-home-me-other", other)); !os.IsNotExist(err) {
+		t.Errorf("unselected session was copied")
+	}
+}
+
+func TestSessionPrefixIsResolvedOrRejected(t *testing.T) {
+	root := t.TempDir()
+	a, b := newAccount(t, root, "a"), newAccount(t, root, "b")
+	other := "11222222-2222-2222-2222-222222222222"
+	writeFile(t, transcriptPath(a, project, session), `{"uuid":"1"}`+"\n", old)
+	writeFile(t, transcriptPath(a, project, other), `{"uuid":"2"}`+"\n", old)
+	accounts := []Account{a, b}
+
+	results := mustSync(t, Options{Accounts: accounts, Session: "1111", Apply: false})
+	if len(results) != 1 || results[0].ID != session {
+		t.Errorf("prefix results = %+v", results)
+	}
+
+	if _, err := Sync(Options{Accounts: accounts, Session: "11", Apply: false}); err == nil ||
+		!strings.Contains(err.Error(), "matches several") {
+		t.Errorf("err = %v, want ambiguity error", err)
+	}
+	if _, err := Sync(Options{Accounts: accounts, Session: "deadbeef", Apply: false}); err == nil ||
+		!strings.Contains(err.Error(), "no session") {
+		t.Errorf("err = %v, want not-found error", err)
+	}
+}
+
+func TestSessionFlagSearchesEveryProject(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", root)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	a, b := newAccount(t, root, "a"), newAccount(t, root, "b")
+	other := "22222222-2222-2222-2222-222222222222"
+	recent := time.Now().Add(-time.Hour)
+	writeFile(t, transcriptPath(a, project, session), `{"uuid":"1"}`+"\n", recent)
+	writeFile(t, transcriptPath(a, "-home-me-other", other), `{"uuid":"2"}`+"\n", recent)
+
+	var out bytes.Buffer
+	if err := run([]string{"sync", "--session", session[:8]}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(transcriptPath(b, project, session)); err != nil {
+		t.Errorf("selected session was not copied: %v", err)
+	}
+	if _, err := os.Stat(transcriptPath(b, "-home-me-other", other)); !os.IsNotExist(err) {
+		t.Errorf("unselected session was copied")
+	}
+
+	out.Reset()
+	if err := run([]string{"sync", "--session", "deadbeef"}, &out); err == nil ||
+		!strings.Contains(err.Error(), "no session") {
+		t.Errorf("err = %v, want no-session error", err)
+	}
+}
+
+func TestExcludedAccountsAreLeftAlone(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", root)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	a, b, c := newAccount(t, root, "a"), newAccount(t, root, "b"), newAccount(t, root, "c")
+	writeFile(t, transcriptPath(a, project, session), `{"uuid":"1"}`+"\n", time.Now().Add(-time.Hour))
+
+	var out bytes.Buffer
+	if err := run([]string{"sync", "--all", "--exclude", "c"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(transcriptPath(b, project, session)); err != nil {
+		t.Errorf("selected account did not receive the session: %v", err)
+	}
+	if _, err := os.Stat(transcriptPath(c, project, session)); !os.IsNotExist(err) {
+		t.Errorf("excluded account received the session")
+	}
+
+	out.Reset()
+	if err := run([]string{"sync", "--all", "--exclude", "nope"}, &out); err == nil ||
+		!strings.Contains(err.Error(), "unknown account") {
+		t.Errorf("err = %v, want unknown-account error", err)
+	}
+	if err := run([]string{"sync", "--all", "--accounts", "a,b", "--exclude", "b"}, &out); err == nil ||
+		!strings.Contains(err.Error(), "need at least two") {
+		t.Errorf("err = %v, want too-few-accounts error", err)
+	}
+}
+
+func TestExcludeCommandPersistsAcrossSyncs(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", root)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	a, b, c := newAccount(t, root, "a"), newAccount(t, root, "b"), newAccount(t, root, "c")
+	writeFile(t, transcriptPath(a, project, session), `{"uuid":"1"}`+"\n", time.Now().Add(-time.Hour))
+
+	var out bytes.Buffer
+	if err := run([]string{"exclude", "c"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "Excluded from syncing: c") {
+		t.Errorf("exclude output = %q", out.String())
+	}
+
+	out.Reset()
+	if err := run([]string{"sync", "--all"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(transcriptPath(b, project, session)); err != nil {
+		t.Errorf("included account did not receive the session: %v", err)
+	}
+	if _, err := os.Stat(transcriptPath(c, project, session)); !os.IsNotExist(err) {
+		t.Errorf("persistently excluded account received the session")
+	}
+
+	out.Reset()
+	if err := run([]string{"exclude", "--remove", "c"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"sync", "--all"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(transcriptPath(c, project, session)); err != nil {
+		t.Errorf("account still excluded after removal: %v", err)
+	}
+
+	out.Reset()
+	if err := run([]string{"exclude", "nope"}, &out); err == nil ||
+		!strings.Contains(err.Error(), "unknown account") {
+		t.Errorf("err = %v, want unknown-account error", err)
 	}
 }
 

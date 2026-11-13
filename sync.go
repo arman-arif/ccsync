@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -22,6 +23,7 @@ const activeWindow = 30 * time.Second
 type Options struct {
 	Accounts []Account       // accounts to keep in step
 	Projects []string        // encoded project folder names; empty means all
+	Session  string          // session ID or unique prefix; empty means all sessions
 	Live     map[string]bool // session IDs never touched in this run
 	Force    bool            // sync running sessions too, ignoring Live and activeWindow
 	Apply    bool            // false reports without writing
@@ -104,7 +106,40 @@ func findSessions(opts Options) ([]sessionKey, error) {
 		}
 		return sessions[i].id < sessions[j].id
 	})
-	return sessions, nil
+	if opts.Session == "" {
+		return sessions, nil
+	}
+	return matchSession(sessions, opts.Session)
+}
+
+// matchSession narrows sessions to the one selected by an ID or unique prefix.
+// Sessions are sorted by project then ID, so copies of one ID are adjacent.
+func matchSession(sessions []sessionKey, id string) ([]sessionKey, error) {
+	var exact, prefix []sessionKey
+	for _, session := range sessions {
+		switch {
+		case session.id == id:
+			exact = append(exact, session)
+		case strings.HasPrefix(session.id, id):
+			prefix = append(prefix, session)
+		}
+	}
+	if len(exact) > 0 {
+		return exact, nil
+	}
+	var ids []string
+	for _, session := range prefix {
+		if len(ids) == 0 || ids[len(ids)-1] != session.id {
+			ids = append(ids, session.id)
+		}
+	}
+	switch len(ids) {
+	case 0:
+		return nil, fmt.Errorf("no session matching %q", id)
+	case 1:
+		return prefix, nil
+	}
+	return nil, fmt.Errorf("%q matches several sessions: %s", id, strings.Join(ids, ", "))
 }
 
 func syncSession(session sessionKey, opts Options) SessionResult {
